@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -56,21 +56,21 @@ jobs:
           ./scripts/macos/build_pkg.sh
 
       - name: Upload .pkg artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-pkg
           path: build/*.pkg
 
       - name: Upload .pkg to GitHub Release (tag push)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/*.pkg
           fail_on_unmatched_files: true
 
       - name: Upload .pkg to GitHub Release (published release)
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: build/*.pkg
@@ -78,7 +78,7 @@ jobs:
 
       - name: Upload .pkg to GitHub Release (manual dispatch)
         if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.release_tag }}
           files: build/*.pkg

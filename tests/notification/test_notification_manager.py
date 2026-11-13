@@ -22,6 +22,10 @@ class TestNotificationManager:
             sound_enabled=True,
             auto_open_urls=True,
         )
+        # The manager reads the OS in its constructor. Pin it, so the tests take
+        # the macOS (osascript) path on every OS, and never play real sound.
+        self.notification_manager.platform = "Darwin"
+        self.notification_manager._play_sound = MagicMock()  # type: ignore[method-assign]
 
         # Create a mock event
         self.event = MagicMock(spec=CalendarEvent)
