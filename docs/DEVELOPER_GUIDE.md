@@ -12,8 +12,8 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/PretorianX/calendar-desktop-notifications.git
-   cd calendar-desktop-notifications
+   git clone https://github.com/PretorianX/calendar-notifications.git
+   cd calendar-notifications
    ```
 
 2. Install dependencies:

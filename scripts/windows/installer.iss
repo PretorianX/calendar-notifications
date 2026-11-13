@@ -9,7 +9,7 @@
 #define AppName "Calendar Desktop Notifications"
 #define AppExeName "CalendarDesktopNotifications.exe"
 #define AppPublisher "Calendar Desktop Notifications Contributors"
-#define AppURL "https://github.com/PretorianX/calendar-desktop-notifications"
+#define AppURL "https://github.com/PretorianX/calendar-notifications"
 
 [Setup]
 ; Keep this GUID stable: Windows uses it to detect upgrades.

@@ -20,7 +20,7 @@ A desktop application that syncs with CalDAV calendars and provides desktop noti
 
 ### Pre-built Executables (Recommended)
 
-Download the latest release from the [releases page](https://github.com/PretorianX/calendar-desktop-notifications/releases):
+Download the latest release from the [releases page](https://github.com/PretorianX/calendar-notifications/releases):
 
 - **Windows**: `CalendarDesktopNotifications-<version>-setup.exe`. It installs per user, adds a Start menu entry and can start the app at sign-in.
 - **macOS**: `CalendarDesktopNotifications-<version>-unsigned.pkg`.
@@ -44,8 +44,8 @@ GitHub Actions builds both installers for every `v*.*.*` tag.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/PretorianX/calendar-desktop-notifications.git
-   cd calendar-desktop-notifications
+   git clone https://github.com/PretorianX/calendar-notifications.git
+   cd calendar-notifications
    ```
 
 2. Install dependencies:
@@ -137,5 +137,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you encounter any issues or have questions:
 1. Check the [User Guide](docs/USER_GUIDE.md)
-2. Look through [existing issues](https://github.com/PretorianX/calendar-desktop-notifications/issues)
+2. Look through [existing issues](https://github.com/PretorianX/calendar-notifications/issues)
 3. Create a new issue with detailed information about your problem 

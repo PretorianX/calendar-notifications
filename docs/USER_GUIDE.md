@@ -11,7 +11,7 @@
 
 ### Pre-built Executables (Recommended)
 
-Download the appropriate version for your operating system from the [releases page](https://github.com/PretorianX/calendar-desktop-notifications/releases):
+Download the appropriate version for your operating system from the [releases page](https://github.com/PretorianX/calendar-notifications/releases):
 
 - **Windows**: `CalendarDesktopNotifications-<version>-setup.exe`
 - **macOS**: `CalendarDesktopNotifications-<version>-unsigned.pkg`
