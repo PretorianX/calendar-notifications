@@ -1,17 +1,18 @@
 """Notification manager for desktop notifications."""
 
 import datetime
+import importlib
 import logging
 import os
 import platform
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import threading
 import webbrowser
 from typing import Any, Dict, List, Optional, cast
 
-import simpleaudio as sa
-
 from src.calendar_sync.caldav_client import CalendarEvent
+from src.resources import resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +67,7 @@ class NotificationManager:
         # Protects notified_events against concurrent access from the sync thread
         # and the notification thread both calling check_events at the same time.
         self._notified_events_lock = threading.Lock()
-        self.sounds_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "sounds"
-        )
+        self.sounds_dir = resource_path("sounds")
         self.sounds: Dict[int, str] = {}
         self._setup_sounds()
         self._url_opener_thread: Optional[threading.Thread] = None
@@ -226,7 +225,8 @@ class NotificationManager:
                         # Otherwise use tomorrow's occurrence if it's within our notification window
                         elif (
                             tomorrow_occurrence > local_now
-                            and time_until_tomorrow <= max(self.notification_intervals) + 60
+                            and time_until_tomorrow
+                            <= max(self.notification_intervals) + 60
                         ):
                             # Add 60 minutes buffer to catch events that might need notification soon
                             time_until_event = time_until_tomorrow
@@ -239,7 +239,8 @@ class NotificationManager:
                             if today_occurrence <= local_now:
                                 logger.debug(
                                     f"Today's occurrence for '{event.summary}' already passed "
-                                    f"at {today_occurrence} (local time: {today_occurrence.astimezone(local_now.tzinfo)}), "
+                                    f"at {today_occurrence} (local time: "
+                                    f"{today_occurrence.astimezone(local_now.tzinfo)}), "
                                     f"checking tomorrow"
                                 )
                             if (
@@ -398,13 +399,32 @@ class NotificationManager:
         """
         try:
             logger.debug(f"Attempting to play sound: {sound_file}")
-            if os.path.exists(sound_file):
-                logger.info(f"Playing notification sound: {sound_file}")
-                wave_obj = sa.WaveObject.from_wave_file(sound_file)
-                wave_obj.play()
-                # Non-blocking, let it play in background
-            else:
+            if not os.path.exists(sound_file):
                 logger.error(f"Sound file not found: {sound_file}")
+                return
+            logger.info(f"Playing notification sound: {sound_file}")
+            # All branches are non-blocking: the sound plays in the background.
+            if self.platform == "Windows":
+                # Loaded at runtime: winsound exists only on Windows.
+                winsound: Any = importlib.import_module("winsound")
+                winsound.PlaySound(
+                    sound_file,
+                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
+                )
+                return
+            if self.platform == "Darwin":
+                player: List[str] = ["afplay"]
+            else:
+                found = shutil.which("paplay") or shutil.which("aplay")
+                if not found:
+                    logger.error("No audio player found (install paplay or aplay)")
+                    return
+                player = [found]
+            subprocess.Popen(  # nosec B603
+                [*player, sound_file],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except Exception as e:
             logger.error(f"Error playing sound: {e}")
             logger.exception("Detailed sound playback error")

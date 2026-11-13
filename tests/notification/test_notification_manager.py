@@ -1,10 +1,14 @@
 """Tests for the notification manager."""
 
 import datetime
+import os
+import sys
 from unittest.mock import MagicMock, patch
 
 from src.calendar_sync.caldav_client import CalendarEvent
+from src.gui.tray_app import LOG_BACKUP_COUNT, LOG_MAX_BYTES
 from src.notification.notification_manager import NotificationManager
+from src.resources import resource_path
 
 
 class TestNotificationManager:
@@ -28,8 +32,10 @@ class TestNotificationManager:
 
     @patch("src.notification.notification_manager.platform.system")
     @patch("src.notification.notification_manager.subprocess.run")
-    @patch("src.notification.notification_manager.sa")
-    def test_notification_within_window(self, mock_sa, mock_subprocess, mock_platform):
+    @patch("src.notification.notification_manager.subprocess.Popen")
+    def test_notification_within_window(
+        self, mock_popen, mock_subprocess, mock_platform
+    ):
         """Test that notifications are triggered within the correct time window."""
         # Mock platform to return macOS so we use the AppleScript notification method
         mock_platform.return_value = "Darwin"
@@ -267,9 +273,7 @@ class TestNotificationManager:
         time_until = (event_start - now_utc).total_seconds() / 60
         assert time_until < -1440, f"Expected time_until < -1440, got {time_until:.1f}"
 
-        with patch.object(
-            self.notification_manager, "_show_notification"
-        ) as mock_show:
+        with patch.object(self.notification_manager, "_show_notification") as mock_show:
             self.notification_manager.check_events([modified_event])
 
             # Modified instances must not be projected to today — no notification
@@ -311,14 +315,12 @@ class TestNotificationManager:
         occurrence_a = _make_occurrence(start_a)
         occurrence_b = _make_occurrence(start_b)
 
-        with patch.object(
-            self.notification_manager, "_show_notification"
-        ) as mock_show:
+        with patch.object(self.notification_manager, "_show_notification") as mock_show:
             # Both occurrences are passed in a single check — each must fire once.
             self.notification_manager.check_events([occurrence_a, occurrence_b])
-            assert mock_show.call_count == 2, (
-                "Both occurrences must notify independently (different occurrence keys)"
-            )
+            assert (
+                mock_show.call_count == 2
+            ), "Both occurrences must notify independently (different occurrence keys)"
 
     @patch("src.notification.notification_manager.platform.system")
     @patch("src.notification.notification_manager.subprocess.run")
@@ -368,6 +370,47 @@ class TestNotificationManager:
 
         self.notification_manager._show_notification = original_show
 
-        assert len(notification_count) == 1, (
-            f"Expected exactly 1 notification, got {len(notification_count)}"
-        )
+        assert (
+            len(notification_count) == 1
+        ), f"Expected exactly 1 notification, got {len(notification_count)}"
+
+
+class TestSoundPlayback:
+    """Sound playback picks a native player per platform and never blocks."""
+
+    def setup_method(self):
+        self.manager = NotificationManager(notification_intervals=[1, 5, 10])
+        self.sound = self.manager.sounds[1]
+
+    def test_bundled_sounds_are_found(self):
+        assert set(self.manager.sounds) == {1, 5, 10}
+        assert os.path.isfile(self.sound)
+
+    def test_macos_uses_afplay(self):
+        self.manager.platform = "Darwin"
+        with patch("src.notification.notification_manager.subprocess.Popen") as popen:
+            self.manager._play_sound(self.sound)
+        assert popen.call_args[0][0] == ["afplay", self.sound]
+
+    def test_windows_uses_winsound_async(self):
+        self.manager.platform = "Windows"
+        fake = MagicMock(SND_FILENAME=1, SND_ASYNC=2, SND_NODEFAULT=4)
+        with patch.dict(sys.modules, {"winsound": fake}):
+            self.manager._play_sound(self.sound)
+        fake.PlaySound.assert_called_once_with(self.sound, 1 | 2 | 4)
+
+    def test_linux_without_player_does_not_raise(self):
+        self.manager.platform = "Linux"
+        with patch(
+            "src.notification.notification_manager.shutil.which", return_value=None
+        ):
+            self.manager._play_sound(self.sound)
+
+
+def test_resource_path_prefers_pyinstaller_bundle(tmp_path):
+    with patch.object(sys, "_MEIPASS", str(tmp_path), create=True):
+        assert resource_path("sounds") == os.path.join(str(tmp_path), "sounds")
+
+
+def test_log_files_are_capped_at_100_mb():
+    assert LOG_MAX_BYTES * (LOG_BACKUP_COUNT + 1) <= 100 * 1024 * 1024

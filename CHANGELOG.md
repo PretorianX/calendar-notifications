@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(windows): Inno Setup installer (`scripts/windows`) with Start menu entry, optional sign-in autostart and tray icon
+- ci(release): GitHub Actions workflow to build the Windows installer and attach it to releases
+- feat(logging): rotate the log file at 20 MB with 4 backups, so logs never exceed 100 MB
+
+### Changed
+- chore(deps): update all dependencies; caldav stays on 1.x (1.6.0), because 2.x and 3.x change the API
+- fix(sound): play sounds with native players (winsound on Windows, afplay on macOS, paplay/aplay on Linux) instead of simpleaudio
+- fix(build): find bundled sounds through the PyInstaller bundle path
+- chore(deps): mark macOS-only pyobjc packages, so Windows installs work; remove unused pyobjus
+- chore: remove company-specific URLs and bundle id for open-source release
 - Initial project setup
 - ci(release): GitHub Actions workflow to build a macOS .pkg installer
 - ci(release): upload built macOS .pkg to GitHub Release assets

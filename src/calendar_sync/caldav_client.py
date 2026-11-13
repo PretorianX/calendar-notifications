@@ -188,10 +188,18 @@ class CalDAVClient:
                         vevents_raw = [ve] if ve else []
                     for ve in vevents_raw:
                         uid_val = getattr(getattr(ve, "uid", None), "value", "?")
-                        dtstart_val = getattr(getattr(ve, "dtstart", None), "value", "?")
-                        recid_val = getattr(getattr(ve, "recurrence_id", None), "value", None)
-                        related_val = getattr(getattr(ve, "related_to", None), "value", None)
-                        summary_val = getattr(getattr(ve, "summary", None), "value", "?")
+                        dtstart_val = getattr(
+                            getattr(ve, "dtstart", None), "value", "?"
+                        )
+                        recid_val = getattr(
+                            getattr(ve, "recurrence_id", None), "value", None
+                        )
+                        related_val = getattr(
+                            getattr(ve, "related_to", None), "value", None
+                        )
+                        summary_val = getattr(
+                            getattr(ve, "summary", None), "value", "?"
+                        )
                         logger.info(
                             "  [%d] uid=%s dtstart=%s recurrence_id=%s related_to=%s summary=%r",
                             idx,
@@ -292,7 +300,10 @@ class CalDAVClient:
 
                         for attendee in attendees:
                             attendee_value = getattr(attendee, "value", None)
-                            if not isinstance(attendee_value, str) or not attendee_value:
+                            if (
+                                not isinstance(attendee_value, str)
+                                or not attendee_value
+                            ):
                                 continue
 
                             if (

@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import logging.handlers
 import os
 import sys
 import threading
@@ -13,9 +14,9 @@ import pystray
 from PIL import Image, ImageDraw, ImageFont
 from PyQt6 import QtCore, QtWidgets
 
+from src._version import __version__
 from src.calendar_sync.caldav_client import CalDAVClient
 from src.config.config_manager import ConfigManager
-from src._version import __version__
 from src.notification.notification_manager import NotificationManager
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class _MacNativeTrayIcon:
                     menu = self._tray_app._build_macos_main_menu()  # noqa: SLF001
                 else:
                     menu = self._tray_app._build_macos_events_menu()  # noqa: SLF001
-                self._tray_app.tray_icon._mac_status_item.popUpStatusItemMenu_(menu)  # type: ignore[attr-defined]  # noqa: SLF001
+                self._tray_app.tray_icon._mac_status_item.popUpStatusItemMenu_(menu)  # type: ignore[attr-defined]  # noqa: SLF001,E501
 
             def onSettings_(self, sender):  # noqa: N802 - Cocoa naming
                 self._tray_app._show_settings()  # noqa: SLF001
@@ -109,9 +110,10 @@ class _MacNativeTrayIcon:
     def icon(self, new_icon: Image.Image) -> None:
         self._icon = new_icon
         try:
+            import io
+
             import AppKit  # type: ignore
             import Foundation  # type: ignore
-            import io
 
             # Status bar icons must be small; otherwise macOS can render them huge.
             # 22x22 is the typical menu bar height on macOS.
@@ -129,6 +131,8 @@ class _MacNativeTrayIcon:
             # Tell AppKit what size we expect.
             ns_image.setSize_(Foundation.NSMakeSize(size_px, size_px))
 
+            if self._status_item is None:
+                return
             button = self._status_item.button()
             button.setImageScaling_(AppKit.NSImageScaleProportionallyDown)
             button.setImage_(ns_image)
@@ -179,15 +183,12 @@ def activate_app_on_macos():
 
                 # Try using the application name if process activation failed
                 # This gets the name of the application bundle on macOS
-                apple_script = (
-                    """
+                apple_script = """
                 tell application "System Events"
                     set frontApp to first application process whose unix id is %d
                     set frontmost of frontApp to true
                 end tell
-                """
-                    % os.getpid()
-                )
+                """ % os.getpid()
 
                 subprocess.run(
                     ["osascript", "-e", apple_script], check=False, capture_output=True
@@ -459,6 +460,8 @@ class TrayApp:
 
         # Initialize Qt application
         self.qt_app = QtWidgets.QApplication(sys.argv)
+        # The tray icon owns the app lifetime; closing a dialog must not quit Qt.
+        self.qt_app.setQuitOnLastWindowClosed(False)
 
         # Initialize threads and flags
         self.sync_thread = None
@@ -488,7 +491,11 @@ class TrayApp:
 
     def _create_tray_icon(self):
         """Create system tray icon."""
-        icon = self._create_macos_icon_image() if sys.platform == "darwin" else self._create_icon_image()
+        icon = (
+            self._create_macos_icon_image()
+            if sys.platform == "darwin"
+            else self._create_icon_image()
+        )
 
         if sys.platform == "darwin":
             # Native macOS tray icon to distinguish left vs right click.
@@ -503,7 +510,9 @@ class TrayApp:
                 pystray.MenuItem(
                     "Show Events (Window)", lambda _icon, _item: self._show_events()
                 ),
-                pystray.MenuItem("Settings", lambda _icon, _item: self._show_settings()),
+                pystray.MenuItem(
+                    "Settings", lambda _icon, _item: self._show_settings()
+                ),
                 pystray.MenuItem("Force Sync", lambda _icon, _item: self._force_sync()),
                 pystray.MenuItem("Exit", lambda _icon, _item: self._exit()),
             )
@@ -844,10 +853,14 @@ class TrayApp:
                         start_dt = event.start_time
                         if start_dt.tzinfo is None:
                             start_dt = start_dt.replace(tzinfo=local_tz)
-                        start_time = start_dt.astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
+                        start_time = start_dt.astimezone(local_tz).strftime(
+                            "%Y-%m-%d %H:%M"
+                        )
 
                         # Left side: status glyph + time + summary
-                        left_text = f"{_status_glyph(event)} {start_time} - {event.summary}"
+                        left_text = (
+                            f"{_status_glyph(event)} {start_time} - {event.summary}"
+                        )
 
                         # Right side: link glyph if URL is in Location field
                         link_glyph = "🔗" if event.get_url() else ""
@@ -908,7 +921,9 @@ class TrayApp:
             return dt.replace(tzinfo=local_tz)
         return dt.astimezone(local_tz)
 
-    def _get_event_display_start_time(self, event, now: DateTimeType) -> DateTimeType | None:
+    def _get_event_display_start_time(
+        self, event, now: DateTimeType
+    ) -> DateTimeType | None:
         """Compute an event's display start time for menus.
 
         - Returns None for events that should not be shown (already in the past).
@@ -916,10 +931,10 @@ class TrayApp:
           compute today's occurrence in the event's original timezone (same logic as tray icon).
         """
         # Modified instances already have the corrected start_time.
+        start_time: DateTimeType = event.start_time
         if getattr(event, "is_modified_instance", False) is True:
-            return event.start_time if event.start_time > now else None
+            return start_time if start_time > now else None
 
-        start_time = event.start_time
         if start_time.tzinfo is None:
             start_time = start_time.replace(tzinfo=now.tzinfo)
 
@@ -1113,7 +1128,9 @@ class TrayApp:
             self._set_events(events)
 
             # Initial check for notifications
-            self.notification_manager.check_events(self._events_for_notifications(events))
+            self.notification_manager.check_events(
+                self._events_for_notifications(events)
+            )
 
             # Update tray icon with time to next meeting
             self._update_tray_icon()
@@ -1130,7 +1147,9 @@ class TrayApp:
         events = self._get_events_snapshot()
         if events:
             logger.debug("Performing notification check on cached events")
-            self.notification_manager.check_events(self._events_for_notifications(events))
+            self.notification_manager.check_events(
+                self._events_for_notifications(events)
+            )
 
             # Update the tray icon to reflect current time until next meeting
             self._update_tray_icon()
@@ -1217,19 +1236,26 @@ class TrayApp:
         self.tray_icon.run()
 
 
+LOG_MAX_BYTES = 20 * 1024 * 1024
+LOG_BACKUP_COUNT = 4
+
+
 def setup_logging():
     """Setup application logging."""
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format=log_format,
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(
-                os.path.join(os.path.expanduser("~"), ".calendar_notifications.log")
-            ),
-        ],
-    )
+    handlers: list[logging.Handler] = [
+        # Disk use is capped at LOG_MAX_BYTES * (LOG_BACKUP_COUNT + 1) = 100 MB.
+        logging.handlers.RotatingFileHandler(
+            os.path.join(os.path.expanduser("~"), ".calendar_notifications.log"),
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+    ]
+    # A windowed (no console) Windows build has no stderr.
+    if sys.stderr is not None:
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(level=logging.DEBUG, format=log_format, handlers=handlers)
 
     # Set custom log levels for noisy modules
     logging.getLogger("PIL").setLevel(logging.WARNING)

@@ -1,0 +1,81 @@
+name: build-windows-installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach built setup.exe to this release tag (e.g. v1.0.0). Leave empty to skip."
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*.*.*"
+  release:
+    types: [published]
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pipenv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pipenv
+
+      - name: Install dependencies (pipenv sync)
+        env:
+          PIPENV_IGNORE_VIRTUALENVS: "1"
+        run: pipenv sync --dev
+
+      - name: Run tests
+        env:
+          PIPENV_IGNORE_VIRTUALENVS: "1"
+          QT_QPA_PLATFORM: offscreen
+        run: pipenv run pytest
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./scripts/windows/build_installer.ps1
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: build/*-setup.exe
+
+      - name: Upload installer to GitHub Release (tag push)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*-setup.exe
+          fail_on_unmatched_files: true
+
+      - name: Upload installer to GitHub Release (published release)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: build/*-setup.exe
+          fail_on_unmatched_files: true
+
+      - name: Upload installer to GitHub Release (manual dispatch)
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: build/*-setup.exe
+          fail_on_unmatched_files: true

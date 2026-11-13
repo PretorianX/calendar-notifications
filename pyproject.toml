@@ -45,13 +45,17 @@ module = [
     "pystray.*",
     "plyer.*",
     "caldav.*",
-    "pyobjus.*",
-    "simpleaudio.*",
     "appdirs.*",
     "PyQt6.*",
     "AppKit.*"
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# PyQt6 6.12 ships .pyi stubs that mypy cannot parse ("'/' parameter must appear before '*'").
+module = ["PyQt6", "PyQt6.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [[tool.mypy.overrides]]
 module = ["src.gui.tray_app"]
@@ -61,6 +65,8 @@ disallow_incomplete_defs = false
 disallow_untyped_calls = false
 check_untyped_defs = false
 warn_unreachable = false
+# AppKit ignores are needed where pyobjc stubs are absent (CI without pyobjc types).
+warn_unused_ignores = false
 
 [tool.pytest.ini_options]
 minversion = "6.0"

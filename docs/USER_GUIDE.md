@@ -11,11 +11,23 @@
 
 ### Pre-built Executables (Recommended)
 
-Download the appropriate version for your operating system from the [releases page](https://github.com/yourname/calendar-desktop-notifications/releases):
+Download the appropriate version for your operating system from the [releases page](https://github.com/PretorianX/calendar-desktop-notifications/releases):
 
-- **Windows**: `calendar-desktop-notifications-windows-amd64.exe`
-- **macOS**: `calendar-desktop-notifications-macos-amd64`
-- **Linux**: `calendar-desktop-notifications-linux-amd64`
+- **Windows**: `CalendarDesktopNotifications-<version>-setup.exe`
+- **macOS**: `CalendarDesktopNotifications-<version>-unsigned.pkg`
+- **Linux**: no pre-built package. Install from source.
+
+#### Windows installer
+
+1. Run `CalendarDesktopNotifications-<version>-setup.exe`. It installs for your user and needs no admin rights.
+2. Keep "Start automatically when I sign in to Windows" selected if you want the app at every sign-in.
+3. At the end, the installer starts the app. The calendar icon appears in the system tray.
+
+NOTE: Windows 11 puts new tray icons in the hidden overflow area (the `^` arrow).
+To keep the icon visible, open **Settings > Personalization > Taskbar > Other system tray icons** and turn on "Calendar Desktop Notifications".
+
+The installer is not code-signed. If Windows SmartScreen shows a warning, select **More info > Run anyway**.
+To remove the app, use **Settings > Apps > Installed apps**.
 
 ### From Source
 
@@ -30,8 +42,9 @@ Download the appropriate version for your operating system from the [releases pa
 
 ### 1. Launch the Application
 
-- **Windows**: Double-click the executable
-- **macOS/Linux**: Run `./calendar-desktop-notifications` from terminal or double-click
+- **Windows**: Open "Calendar Desktop Notifications" from the Start menu
+- **macOS**: Open the app from `/Applications`
+- **Linux**: Run `pipenv run start` in the project folder
 
 The application will start in your system tray.
 
@@ -110,7 +123,8 @@ The application will notify you:
 
 ### Logs
 
-Application logs are stored in:
-- **Windows**: `%APPDATA%\calendar-desktop-notifications\logs`
-- **macOS**: `~/Library/Application Support/calendar-desktop-notifications/logs`
-- **Linux**: `~/.config/calendar-desktop-notifications/logs` 
+The application writes its log to `.calendar_notifications.log` in your home folder
+(on Windows: `%USERPROFILE%\.calendar_notifications.log`).
+
+The log rotates at 20 MB and keeps 4 old files (`.log.1` to `.log.4`).
+The log files never use more than 100 MB in total. 

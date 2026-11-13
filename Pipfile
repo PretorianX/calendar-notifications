@@ -4,17 +4,19 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-caldav = ">=1.3.2,<1.5.0"
+caldav = ">=1.4.0,<2.0.0"
 pystray = ">=0.19.4"
 pillow = ">=10.1.0"
 pyqt6 = ">=6.6.1"
 python-dateutil = ">=2.8.2"
 plyer = ">=2.1.0"
 pytz = ">=2023.3"
-simpleaudio = ">=1.0.4"
 appdirs = ">=1.4.4"
 pyyaml = ">=6.0.1"
-pyobjus = "*"
+# macOS-only: native menu bar icon (AppKit). Quartz is pulled in by pystray;
+# the explicit marker keeps it out of Windows installs.
+pyobjc-framework-cocoa = {version = "*", markers = "sys_platform == 'darwin'"}
+pyobjc-framework-quartz = {version = "*", markers = "sys_platform == 'darwin'"}
 psutil = ">=5.9.0"
 
 [dev-packages]
@@ -28,6 +30,14 @@ isort = "*"
 pylint = "*"
 bandit = "*"
 safety = "*"
+pyinstaller = "*"
+types-pyyaml = "*"
+types-pytz = "*"
+types-psutil = "*"
+# Windows-only deps of pyinstaller/pytest; listed so the lock (made on macOS) carries them.
+pefile = {version = "*", markers = "sys_platform == 'win32'"}
+pywin32-ctypes = {version = "*", markers = "sys_platform == 'win32'"}
+colorama = {version = "*", markers = "sys_platform == 'win32'"}
 
 [requires]
 python_version = "3.11"
@@ -40,7 +50,7 @@ lint = "flake8 src tests"
 format = "black src tests"
 format-check = "black --check src tests"
 isort = "isort src tests"
-isort-check = "isort --check-only src tests"
+isort-check = "isort src tests --check-only"
 mypy = "python -m mypy --explicit-package-bases src"
 security = "bandit -r src"
 safety-check = "safety check"

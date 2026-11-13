@@ -334,9 +334,7 @@ class TestCalDAVClient:
         assert event.end_time.hour == 16  # 4 PM Athens time
 
         assert event.location == "https://meet.example.com/team-sync"
-        assert (
-            event.description == "https://jitsi.example.org:8443/team-sync"
-        )
+        assert event.description == "https://jitsi.example.org:8443/team-sync"
 
     @patch("caldav.DAVClient")
     def test_get_events_with_naive_dates_gets_utc_timezone(self, mock_dav_client):
@@ -467,9 +465,7 @@ class TestCalDAVClient:
         assert event.uid == "7c7d0461-1bf3-458c-9fd2-81449b161736"
         assert event.summary == "PM - Architect sync"
         assert event.location == "https://meet.example.com/team-sync"
-        assert (
-            event.description == "https://jitsi.example.org:8443/team-sync"
-        )
+        assert event.description == "https://jitsi.example.org:8443/team-sync"
 
         # Verify the datetime values are correct and preserve timezone
         # This should be 15:00 Athens time, NOT the creation time
@@ -518,9 +514,7 @@ class TestCalDAVClient:
         actual_start = kyiv_tz.localize(datetime.datetime(2026, 2, 16, 14, 30, 0))
         actual_end = kyiv_tz.localize(datetime.datetime(2026, 2, 16, 16, 0, 0))
         # RECURRENCE-ID — original occurrence it replaces (Feb 9, a week ago)
-        recurrence_id_time = kyiv_tz.localize(
-            datetime.datetime(2026, 2, 9, 14, 30, 0)
-        )
+        recurrence_id_time = kyiv_tz.localize(datetime.datetime(2026, 2, 9, 14, 30, 0))
 
         vevent.dtstart.value = actual_start
         vevent.dtend.value = actual_end
@@ -631,7 +625,9 @@ class TestCalDAVClient:
         Regression: returning [] caused _sync_calendar to call _set_events([]),
         wiping the entire event cache on a transient network error.
         """
-        mock_dav_client.return_value.principal.side_effect = Exception("connection refused")
+        mock_dav_client.return_value.principal.side_effect = Exception(
+            "connection refused"
+        )
 
         client = CalDAVClient(
             url="https://example.com/caldav",

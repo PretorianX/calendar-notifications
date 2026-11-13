@@ -14,7 +14,7 @@ export PIPENV_IGNORE_VIRTUALENVS="${PIPENV_IGNORE_VIRTUALENVS:-1}"
 VERSION="$(pipenv run python -c 'from src._version import __version__; print(__version__)')"
 
 echo "Building macOS app with PyInstaller (version: ${VERSION})..."
-pipenv run python -m pip install --upgrade pyinstaller
+# PyInstaller is a locked dev dependency (pipenv sync --dev).
 
 rm -rf build dist
 
