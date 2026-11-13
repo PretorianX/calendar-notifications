@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-13
+
 ### Added
 - feat(windows): Inno Setup installer (`scripts/windows`) with Start menu entry, optional sign-in autostart and tray icon
 - ci(release): GitHub Actions workflow to build the Windows installer and attach it to releases
