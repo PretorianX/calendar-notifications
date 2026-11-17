@@ -199,6 +199,28 @@ def activate_app_on_macos():
         logger.error(f"Error activating application: {e}")
 
 
+class _MainThreadInvoker(QtCore.QObject):
+    """Runs callables on the Qt main thread.
+
+    The signal is queued, so `invoke` is safe to call from any thread.
+    """
+
+    _call = QtCore.pyqtSignal(object)
+
+    def __init__(self):
+        super().__init__()
+        self._call.connect(self._run, QtCore.Qt.ConnectionType.QueuedConnection)
+
+    def _run(self, func):
+        try:
+            func()
+        except Exception:
+            logger.exception("Error in a tray action")
+
+    def invoke(self, func):
+        self._call.emit(func)
+
+
 class SettingsDialog(QtWidgets.QDialog):
     """Settings dialog for the application."""
 
@@ -462,6 +484,8 @@ class TrayApp:
         self.qt_app = QtWidgets.QApplication(sys.argv)
         # The tray icon owns the app lifetime; closing a dialog must not quit Qt.
         self.qt_app.setQuitOnLastWindowClosed(False)
+        # Must be created on the main thread: its slot runs where it lives.
+        self._ui_invoker = _MainThreadInvoker()
 
         # Initialize threads and flags
         self.sync_thread = None
@@ -489,6 +513,17 @@ class TrayApp:
         with self._events_lock:
             return list(self._events)
 
+    def _run_on_ui_thread(self, func):
+        """Run a tray action that opens Qt windows or stops the app.
+
+        On Windows the tray icon has its own thread (see `run`), so the action
+        goes to the Qt main thread. Elsewhere the tray callback is already there.
+        """
+        if sys.platform == "win32":
+            self._ui_invoker.invoke(func)
+        else:
+            func()
+
     def _create_tray_icon(self):
         """Create system tray icon."""
         icon = (
@@ -508,13 +543,17 @@ class TrayApp:
             menu = pystray.Menu(
                 pystray.MenuItem("Events", events_menu),
                 pystray.MenuItem(
-                    "Show Events (Window)", lambda _icon, _item: self._show_events()
+                    "Show Events (Window)",
+                    lambda _icon, _item: self._run_on_ui_thread(self._show_events),
                 ),
                 pystray.MenuItem(
-                    "Settings", lambda _icon, _item: self._show_settings()
+                    "Settings",
+                    lambda _icon, _item: self._run_on_ui_thread(self._show_settings),
                 ),
                 pystray.MenuItem("Force Sync", lambda _icon, _item: self._force_sync()),
-                pystray.MenuItem("Exit", lambda _icon, _item: self._exit()),
+                pystray.MenuItem(
+                    "Exit", lambda _icon, _item: self._run_on_ui_thread(self._exit)
+                ),
             )
 
             self.tray_icon = pystray.Icon(
@@ -1233,7 +1272,16 @@ class TrayApp:
         # Run tray icon
         if self.tray_icon is None:
             raise RuntimeError("Tray icon was not initialized")
-        self.tray_icon.run()
+        if sys.platform == "win32":
+            # pystray's hidden tray window becomes the active window when it
+            # shows the menu. It then refuses to pass activation to another
+            # window of its own thread, so a Qt dialog on that thread ignores
+            # all mouse and keyboard input. Keep the tray on its own thread
+            # and give the main thread to Qt.
+            self.tray_icon.run_detached()
+            self.qt_app.exec()
+        else:
+            self.tray_icon.run()
 
 
 LOG_MAX_BYTES = 20 * 1024 * 1024

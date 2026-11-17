@@ -585,3 +585,60 @@ class TestTrayApp:
                 # Verify "99" text
                 mock_draw.text.assert_called()
                 assert any("99" in str(call) for call in mock_draw.text.call_args_list)
+
+
+class TestWindowsTrayThreading:
+    """On Windows the tray icon must not share a thread with Qt dialogs."""
+
+    CONFIG = {
+        "caldav": {"url": "", "username": "", "password": "", "calendar_name": ""},
+        "sync": {"interval_minutes": 5, "sync_hours": 24},
+        "notifications": {
+            "intervals_minutes": [1, 5],
+            "sound_enabled": True,
+            "notify_declined": False,
+        },
+        "auto_open_urls": True,
+    }
+
+    def _tray_app(self, mock_config_manager):
+        mock_config_manager.return_value.get_config.return_value = self.CONFIG
+        tray_app = TrayApp()
+        tray_app._sync_thread_func = MagicMock()
+        tray_app._notification_thread_func = MagicMock()
+        return tray_app
+
+    @patch("src.gui.tray_app.QtWidgets.QApplication")
+    @patch("src.gui.tray_app.NotificationManager")
+    @patch("src.gui.tray_app.CalDAVClient")
+    @patch("src.gui.tray_app.ConfigManager")
+    def test_run_on_windows_detaches_tray_and_runs_qt_loop(
+        self, mock_config_manager, _caldav, _notifications, _qapp
+    ):
+        tray_app = self._tray_app(mock_config_manager)
+        icon = MagicMock()
+        tray_app._create_tray_icon = lambda: setattr(tray_app, "tray_icon", icon)
+
+        with patch("src.gui.tray_app.sys.platform", "win32"):
+            tray_app.run()
+
+        icon.run_detached.assert_called_once_with()
+        icon.run.assert_not_called()
+        tray_app.qt_app.exec.assert_called_once_with()
+
+    @patch("src.gui.tray_app.QtWidgets.QApplication")
+    @patch("src.gui.tray_app.NotificationManager")
+    @patch("src.gui.tray_app.CalDAVClient")
+    @patch("src.gui.tray_app.ConfigManager")
+    def test_windows_tray_actions_go_to_the_qt_thread(
+        self, mock_config_manager, _caldav, _notifications, _qapp
+    ):
+        tray_app = self._tray_app(mock_config_manager)
+        tray_app._ui_invoker = MagicMock()
+        action = MagicMock()
+
+        with patch("src.gui.tray_app.sys.platform", "win32"):
+            tray_app._run_on_ui_thread(action)
+
+        tray_app._ui_invoker.invoke.assert_called_once_with(action)
+        action.assert_not_called()

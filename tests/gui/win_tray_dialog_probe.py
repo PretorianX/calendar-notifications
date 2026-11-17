@@ -4,7 +4,7 @@ Run as a script: ``python tests/gui/win_tray_dialog_probe.py <mode>``.
 
 Modes:
 - ``menu``: right-click the tray icon, pick "Settings" with the keyboard.
-- ``direct``: call the Settings handler from the tray icon's message handler.
+- ``direct``: start the Settings action from the tray icon's message handler.
 
 The probe starts the real ``TrayApp``. A watcher thread plays the user: it opens
 the dialog, clicks "Cancel" with real mouse input and waits for the dialog to
@@ -168,7 +168,9 @@ def _open_from_menu(icon) -> None:
 
 
 def _open_direct(app, icon) -> None:
-    icon._message_handlers[WM_PROBE_SETTINGS] = lambda _w, _l: app._show_settings()
+    icon._message_handlers[WM_PROBE_SETTINGS] = lambda _w, _l: app._run_on_ui_thread(
+        app._show_settings
+    )
     user32.PostMessageW(icon._hwnd, WM_PROBE_SETTINGS, 0, 0)
 
 
@@ -210,7 +212,12 @@ def _watch(app, mode: str) -> None:
             user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
             user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
             log(f"clicked Cancel at {point.x},{point.y}")
+        foreground = user32.GetForegroundWindow() == hwnd
         if _wait(lambda: not _dialog_hwnd(), 5):
+            if not foreground:
+                log("RESULT dialog was not the foreground window: no keyboard input")
+                code = 4
+                return
             log("RESULT responsive: Cancel click closed the dialog")
             code = 0
             return
