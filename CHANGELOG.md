@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-17
+
+### Fixed
+- fix(windows): the installed app played no notification sound. The build did not include the `winsound` module. The build now includes it and fails if it is missing.
+- fix(windows): notifications showed `CalendarDesktopNotifications.exe` as the app name. The exe now has a version resource with the name "Calendar Notifications".
+
+## [1.1.1] - 2026-11-17
+
 ### Fixed
 - fix(windows): the Settings and Events windows opened from the tray menu ignored all mouse and keyboard input. The tray icon now has its own thread and Qt owns the main thread.
 
