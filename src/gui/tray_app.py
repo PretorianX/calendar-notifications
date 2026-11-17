@@ -493,6 +493,8 @@ class TrayApp:
         self.running = True
         self._events_lock = threading.RLock()
         self._events = []
+        self._settings_dialog_open = False
+        self._events_dialog_open = False
 
         # Tray icon is created on `run()` to avoid side effects during construction.
         self.tray_icon = None
@@ -841,6 +843,9 @@ class TrayApp:
 
     def _show_events(self, _=None):
         """Show upcoming events in a dialog."""
+        if self._events_dialog_open:
+            return
+        
         events = self._get_events_snapshot()
 
         def _status_glyph(event) -> str:
@@ -934,7 +939,11 @@ class TrayApp:
         dialog = EventsDialog(events)
         # Activate app when dialog is shown
         activate_app_on_macos()
-        dialog.exec()
+        self._events_dialog_open = True
+        try:
+            dialog.exec()
+        finally:
+            self._events_dialog_open = False
 
     def _open_url(self, url: str) -> None:
         """Open a URL in the default browser."""
@@ -1114,32 +1123,39 @@ class TrayApp:
 
     def _show_settings(self, _=None):
         """Show settings dialog."""
+        if self._settings_dialog_open:
+            return
+        
         dialog = SettingsDialog(self.config_manager)
         # Activate app when dialog is shown
         activate_app_on_macos()
-        if dialog.exec():
-            # Reload configuration
-            self.config = self.config_manager.get_config()
+        self._settings_dialog_open = True
+        try:
+            if dialog.exec():
+                # Reload configuration
+                self.config = self.config_manager.get_config()
 
-            # Update CalDAV client
-            self.caldav_client = CalDAVClient(
-                url=self.config["caldav"]["url"],
-                username=self.config["caldav"]["username"],
-                password=self.config["caldav"]["password"],
-                calendar_name=self.config["caldav"]["calendar_name"],
-            )
+                # Update CalDAV client
+                self.caldav_client = CalDAVClient(
+                    url=self.config["caldav"]["url"],
+                    username=self.config["caldav"]["username"],
+                    password=self.config["caldav"]["password"],
+                    calendar_name=self.config["caldav"]["calendar_name"],
+                )
 
-            # Update notification manager
-            self.notification_manager = NotificationManager(
-                notification_intervals=self.config["notifications"][
-                    "intervals_minutes"
-                ],
-                sound_enabled=self.config["notifications"]["sound_enabled"],
-                auto_open_urls=self.config["auto_open_urls"],
-            )
+                # Update notification manager
+                self.notification_manager = NotificationManager(
+                    notification_intervals=self.config["notifications"][
+                        "intervals_minutes"
+                    ],
+                    sound_enabled=self.config["notifications"]["sound_enabled"],
+                    auto_open_urls=self.config["auto_open_urls"],
+                )
 
-            # Force sync
-            self._force_sync()
+                # Force sync
+                self._force_sync()
+        finally:
+            self._settings_dialog_open = False
 
     def _force_sync(self, _=None):
         """Force calendar synchronization."""
