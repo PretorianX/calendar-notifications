@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(windows): the Settings and Events windows opened from the tray menu ignored all mouse and keyboard input. The tray icon now has its own thread and Qt owns the main thread.
+
+### Added
+- ci(windows): run the tests on Windows for branch pushes and pull requests, with a tray test that opens Settings from the real tray menu
+
 ## [1.1.0] - 2026-11-13
 
 ### Added

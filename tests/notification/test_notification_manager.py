@@ -71,11 +71,13 @@ class TestNotificationManager:
             mock_subprocess.assert_called_once()
             mock_subprocess.reset_mock()
 
-        # Test just outside window (9.5 minutes)
+        # Test just outside window (9.4 minutes). The window is [9.5, 10.5] and
+        # includes its edges. Exactly 9.5 passes or fails by clock resolution:
+        # on Windows two close `now()` calls can return the same value.
         self.notification_manager.notified_events = {}  # Reset notified events
         self.event.start_time = now + datetime.timedelta(
-            minutes=9, seconds=30
-        )  # 9.5 minutes
+            minutes=9, seconds=24
+        )  # 9.4 minutes
 
         with patch("os.path.exists", return_value=True):
             self.notification_manager.check_events(events)

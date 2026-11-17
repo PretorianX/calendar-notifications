@@ -199,6 +199,28 @@ def activate_app_on_macos():
         logger.error(f"Error activating application: {e}")
 
 
+class _MainThreadInvoker(QtCore.QObject):
+    """Runs callables on the Qt main thread.
+
+    The signal is queued, so `invoke` is safe to call from any thread.
+    """
+
+    _call = QtCore.pyqtSignal(object)
+
+    def __init__(self):
+        super().__init__()
+        self._call.connect(self._run, QtCore.Qt.ConnectionType.QueuedConnection)
+
+    def _run(self, func):
+        try:
+            func()
+        except Exception:
+            logger.exception("Error in a tray action")
+
+    def invoke(self, func):
+        self._call.emit(func)
+
+
 class SettingsDialog(QtWidgets.QDialog):
     """Settings dialog for the application."""
 
@@ -462,6 +484,8 @@ class TrayApp:
         self.qt_app = QtWidgets.QApplication(sys.argv)
         # The tray icon owns the app lifetime; closing a dialog must not quit Qt.
         self.qt_app.setQuitOnLastWindowClosed(False)
+        # Must be created on the main thread: its slot runs where it lives.
+        self._ui_invoker = _MainThreadInvoker()
 
         # Initialize threads and flags
         self.sync_thread = None
@@ -469,6 +493,8 @@ class TrayApp:
         self.running = True
         self._events_lock = threading.RLock()
         self._events = []
+        self._settings_dialog_open = False
+        self._events_dialog_open = False
 
         # Tray icon is created on `run()` to avoid side effects during construction.
         self.tray_icon = None
@@ -489,6 +515,17 @@ class TrayApp:
         with self._events_lock:
             return list(self._events)
 
+    def _run_on_ui_thread(self, func):
+        """Run a tray action that opens Qt windows or stops the app.
+
+        On Windows the tray icon has its own thread (see `run`), so the action
+        goes to the Qt main thread. Elsewhere the tray callback is already there.
+        """
+        if sys.platform == "win32":
+            self._ui_invoker.invoke(func)
+        else:
+            func()
+
     def _create_tray_icon(self):
         """Create system tray icon."""
         icon = (
@@ -508,13 +545,17 @@ class TrayApp:
             menu = pystray.Menu(
                 pystray.MenuItem("Events", events_menu),
                 pystray.MenuItem(
-                    "Show Events (Window)", lambda _icon, _item: self._show_events()
+                    "Show Events (Window)",
+                    lambda _icon, _item: self._run_on_ui_thread(self._show_events),
                 ),
                 pystray.MenuItem(
-                    "Settings", lambda _icon, _item: self._show_settings()
+                    "Settings",
+                    lambda _icon, _item: self._run_on_ui_thread(self._show_settings),
                 ),
                 pystray.MenuItem("Force Sync", lambda _icon, _item: self._force_sync()),
-                pystray.MenuItem("Exit", lambda _icon, _item: self._exit()),
+                pystray.MenuItem(
+                    "Exit", lambda _icon, _item: self._run_on_ui_thread(self._exit)
+                ),
             )
 
             self.tray_icon = pystray.Icon(
@@ -802,6 +843,9 @@ class TrayApp:
 
     def _show_events(self, _=None):
         """Show upcoming events in a dialog."""
+        if self._events_dialog_open:
+            return
+        
         events = self._get_events_snapshot()
 
         def _status_glyph(event) -> str:
@@ -895,7 +939,11 @@ class TrayApp:
         dialog = EventsDialog(events)
         # Activate app when dialog is shown
         activate_app_on_macos()
-        dialog.exec()
+        self._events_dialog_open = True
+        try:
+            dialog.exec()
+        finally:
+            self._events_dialog_open = False
 
     def _open_url(self, url: str) -> None:
         """Open a URL in the default browser."""
@@ -1075,32 +1123,39 @@ class TrayApp:
 
     def _show_settings(self, _=None):
         """Show settings dialog."""
+        if self._settings_dialog_open:
+            return
+        
         dialog = SettingsDialog(self.config_manager)
         # Activate app when dialog is shown
         activate_app_on_macos()
-        if dialog.exec():
-            # Reload configuration
-            self.config = self.config_manager.get_config()
+        self._settings_dialog_open = True
+        try:
+            if dialog.exec():
+                # Reload configuration
+                self.config = self.config_manager.get_config()
 
-            # Update CalDAV client
-            self.caldav_client = CalDAVClient(
-                url=self.config["caldav"]["url"],
-                username=self.config["caldav"]["username"],
-                password=self.config["caldav"]["password"],
-                calendar_name=self.config["caldav"]["calendar_name"],
-            )
+                # Update CalDAV client
+                self.caldav_client = CalDAVClient(
+                    url=self.config["caldav"]["url"],
+                    username=self.config["caldav"]["username"],
+                    password=self.config["caldav"]["password"],
+                    calendar_name=self.config["caldav"]["calendar_name"],
+                )
 
-            # Update notification manager
-            self.notification_manager = NotificationManager(
-                notification_intervals=self.config["notifications"][
-                    "intervals_minutes"
-                ],
-                sound_enabled=self.config["notifications"]["sound_enabled"],
-                auto_open_urls=self.config["auto_open_urls"],
-            )
+                # Update notification manager
+                self.notification_manager = NotificationManager(
+                    notification_intervals=self.config["notifications"][
+                        "intervals_minutes"
+                    ],
+                    sound_enabled=self.config["notifications"]["sound_enabled"],
+                    auto_open_urls=self.config["auto_open_urls"],
+                )
 
-            # Force sync
-            self._force_sync()
+                # Force sync
+                self._force_sync()
+        finally:
+            self._settings_dialog_open = False
 
     def _force_sync(self, _=None):
         """Force calendar synchronization."""
@@ -1233,7 +1288,16 @@ class TrayApp:
         # Run tray icon
         if self.tray_icon is None:
             raise RuntimeError("Tray icon was not initialized")
-        self.tray_icon.run()
+        if sys.platform == "win32":
+            # pystray's hidden tray window becomes the active window when it
+            # shows the menu. It then refuses to pass activation to another
+            # window of its own thread, so a Qt dialog on that thread ignores
+            # all mouse and keyboard input. Keep the tray on its own thread
+            # and give the main thread to Qt.
+            self.tray_icon.run_detached()
+            self.qt_app.exec()
+        else:
+            self.tray_icon.run()
 
 
 LOG_MAX_BYTES = 20 * 1024 * 1024
