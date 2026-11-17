@@ -53,6 +53,16 @@ user32.PostMessageW.argtypes = [
     wintypes.LPARAM,
 ]
 user32.IsWindowVisible.argtypes = [wintypes.HWND]
+user32.IsWindowEnabled.argtypes = [wintypes.HWND]
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.WindowFromPoint.restype = wintypes.HWND
+user32.WindowFromPoint.argtypes = [wintypes.POINT]
+user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.GetWindowThreadProcessId.argtypes = [
+    wintypes.HWND,
+    ctypes.POINTER(wintypes.DWORD),
+]
 user32.IsHungAppWindow.argtypes = [wintypes.HWND]
 user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 user32.SendMessageTimeoutW.argtypes = [
@@ -78,6 +88,49 @@ def _record_cancel_point(dialog, event) -> None:
     ratio = dialog.devicePixelRatioF()
     cancel_point[:] = [int(centre.x() * ratio), int(centre.y() * ratio)]
     log(f"dialog showEvent on thread {threading.current_thread().name}")
+
+
+class GUITHREADINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("hwndActive", wintypes.HWND),
+        ("hwndFocus", wintypes.HWND),
+        ("hwndCapture", wintypes.HWND),
+        ("hwndMenuOwner", wintypes.HWND),
+        ("hwndMoveSize", wintypes.HWND),
+        ("hwndCaret", wintypes.HWND),
+        ("rcCaret", wintypes.RECT),
+    ]
+
+
+def _describe(hwnd) -> str:
+    if not hwnd:
+        return "None"
+    name = ctypes.create_unicode_buffer(128)
+    title = ctypes.create_unicode_buffer(128)
+    user32.GetClassNameW(hwnd, name, 128)
+    user32.GetWindowTextW(hwnd, title, 128)
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    own = "own" if pid.value == os.getpid() else f"pid {pid.value}"
+    return f"{hwnd} [{name.value}] '{title.value}' ({own})"
+
+
+def _log_window_state(label: str, hwnd, point) -> None:
+    """Log where input goes for the dialog's thread."""
+    info = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
+    thread_id = user32.GetWindowThreadProcessId(hwnd, None)
+    user32.GetGUIThreadInfo(thread_id, ctypes.byref(info))
+    log(f"{label}: gui flags={info.flags:#x}")
+    log(f"{label}: active={_describe(info.hwndActive)}")
+    log(f"{label}: focus={_describe(info.hwndFocus)}")
+    log(f"{label}: capture={_describe(info.hwndCapture)}")
+    log(f"{label}: menu owner={_describe(info.hwndMenuOwner)}")
+    log(f"{label}: foreground={_describe(user32.GetForegroundWindow())}")
+    log(f"{label}: dialog enabled={bool(user32.IsWindowEnabled(hwnd))}")
+    if point is not None:
+        log(f"{label}: window at click point={_describe(user32.WindowFromPoint(point))}")
 
 
 def _wait(condition, timeout: float):
@@ -151,6 +204,7 @@ def _watch(app, mode: str) -> None:
         point = wintypes.POINT(*cancel_point) if cancel_point else None
         if point is not None:
             user32.ClientToScreen(hwnd, ctypes.byref(point))
+            _log_window_state("before click", hwnd, point)
             user32.SetCursorPos(point.x, point.y)
             time.sleep(0.3)
             user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
@@ -166,6 +220,7 @@ def _watch(app, mode: str) -> None:
             hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 3000, ctypes.byref(reply)
         )
         log(f"Cancel click ignored. WM_NULL answered={bool(answered)}")
+        _log_window_state("after click", hwnd, point)
         user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
         closed = bool(_wait(lambda: not _dialog_hwnd(), 5))
         log(f"WM_CLOSE closed the dialog={closed}")
